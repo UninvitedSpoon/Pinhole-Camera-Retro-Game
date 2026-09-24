@@ -1,0 +1,1900 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My First Rendering Algo</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000000;
+      color: white;
+      font-family: Arial, sans-serif;
+    }
+
+    /* Header style */
+    #header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 85px;
+      background: #303030;
+      border-bottom: 2px solid #4d4d4d;
+      display: flex;
+      align-items: center;
+      padding: 10px 20px;
+      z-index: 10;
+    }
+
+    /* Project title section */
+    #projectTitle {
+      width: 230px;
+      flex-shrink: 0;
+    }
+
+    #projectTitle h1 {
+      margin: 0;
+      font-size: 24px;
+    }
+
+    #projectTitle p {
+      margin: 3px 0 0 0;
+      font-size: 13px;
+      color: #ccc5aa;
+    }
+
+    /* Name section */
+    #nameSection {
+    width: 180px;
+    flex-shrink: 0;
+    padding-left: 15px;
+    }
+
+    #name {
+    font-size: 20px;
+    color: white;
+    }
+
+    /* Instructions section */
+    #instructions {
+      flex: 1;
+      min-width: 250px;
+      padding: 0 20px;
+    }
+
+    #instructionsTitle {
+      font-weight: bold;
+      font-size: 13px;
+      margin-bottom: 4px;
+    }
+
+    #instructionsText {
+      font-size: 12px;
+      color: #ddd7cc;
+      line-height: 1.3;
+    }
+
+    /* Version buttons section */
+    #versions {
+      display: flex;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .versionButton {
+      height: 38px;
+      padding: 0 12px;
+      background: #383220;
+      color: white;
+      border: 1px solid #666248;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .versionButton:hover {
+      background: #524930;
+    }
+
+    .versionButton.active {
+      background: #5c5734;
+      border-color: #aaa877;
+    }
+
+    /* Canvas */
+    canvas {
+      position: fixed;
+      left: 50%;
+      top: 85px;
+      width: min(100vw, calc((100vh - 85px) * 1.6));
+      height: auto;
+      transform: translateX(-50%);
+      display: block;
+    }
+
+    /* Info box */
+    #info {
+      position: fixed;
+      top: 100px;
+      left: 12px;
+      padding: 12px 14px;
+      background: rgba(0, 0, 0, 0.6);
+      border-radius: 8px;
+      font-size: 14px;
+      line-height: 1.4;
+      z-index: 5;
+    }
+  </style>
+</head>
+<body>
+  <header id="header">
+
+    <div id="projectTitle">
+      <h1>Project One</h1>
+      <p>Pinhole camera, rasterized display</p>
+    </div>
+
+    <div id="nameSection">
+        <div id="name">Jackson Krebs</div>
+    </div>
+
+    <div id="instructions">
+      <div id="instructionsTitle">
+        Instructions
+      </div>
+      <div id="instructionsText">
+        Drive down the road using the arrow keys and collide with green cubes.
+        Avoid red spikes. Press R to reset. Don't miss a green cube.
+      </div>
+    </div>
+
+    <nav id="versions">
+      <button
+        class="versionButton active"
+        id="homeButton"
+        type="button"
+      >
+        Home
+      </button>
+
+      <button
+        class="versionButton"
+        id="gameButton"
+        type="button"
+      >
+        Wireframe Game
+      </button>
+
+      <button
+        class="versionButton"
+        id="lowResButton"
+        type="button"
+      >
+        Low Resolution
+      </button>
+
+      <button
+        class="versionButton"
+        id="filledButton"
+        type="button"
+      >
+        Filled Triangles
+      </button>
+    </nav>
+  </header>
+
+  <canvas id="canvas" width="1600" height="1000"></canvas>
+
+  <div id="info">
+    <b id="gameStatus"></b><br>
+  </div>
+
+<script>
+  // ---------------------------------------------------------------------------------------------------
+  // Set up the canvas and context, and declare a variable to track the current mode.
+  const canvas = document.getElementById("canvas");
+  const ctx = canvas.getContext("2d");
+  let currentMode = "home";
+
+  document.getElementById("homeButton").addEventListener("click", () => {
+    SwitchApplicationMode("home");
+  });
+
+  document.getElementById("gameButton").addEventListener("click", () => {
+    SwitchApplicationMode("game");
+  });
+
+  document.getElementById("lowResButton").addEventListener("click", () => {
+    SwitchApplicationMode("lowRes");
+  });
+
+  document.getElementById("filledButton").addEventListener("click", () => {
+    SwitchApplicationMode("filled");
+  });
+
+  function SwitchApplicationMode(mode) {
+    currentMode = mode;
+    SetCameraForMode(mode);
+
+    if (mode === "game" || mode === "lowRes" || mode === "filled")
+    {
+      ResetBuildings();
+      InitializeDashedRoadLines();
+
+      spikes = [];
+      cubes = [];
+      GenerateObstacles();
+    }
+
+    Draw();
+  }
+
+  function ResizeCanvas() 
+  {
+    Draw();
+  }
+
+  // This uses a built in 'DrawLine' function, provided by the javascript canvas
+  function DrawLine(x1, y1, x2, y2, color = "white")
+  {
+    // If we are in low-resolution mode, draw lines this way.
+    if(currentMode === "lowRes" || currentMode === "filled")
+    {
+      DrawLowResLine(x1, y1, x2, y2, color);
+      return;
+    }
+
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = color;
+
+    //this is how you draw a line on the canvas 
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+  }
+
+  // Function to project vertices.
+  function ProjectVertex(vertex)
+  {
+    // Convert world position to camera-relative position
+    let camVert = {};
+
+    camVert.x = vertex.x - camera.x;
+    camVert.y = vertex.y - camera.y;
+    camVert.z = vertex.z - camera.z;
+
+    // Project the 3D position onto the 2D plane
+    let canvasPos = {};
+
+    canvasPos.u = camVert.x / camVert.z;
+    canvasPos.v = camVert.y / camVert.z;
+
+    // Scale and center on the canvas
+    canvasPos.u = canvasPos.u * canvas.width + canvas.width / 2;
+    canvasPos.v = canvasPos.v * canvas.height + canvas.height / 2;
+
+    // Flip the canvas y-axis
+    canvasPos.v = canvas.height - canvasPos.v;
+
+    // Keep the camera z for filled mode
+    canvasPos.z = camVert.z;
+
+    return canvasPos;
+  }
+
+  function Draw() 
+  {
+    switch (currentMode) 
+    {
+      case "home":
+        DrawHome();
+        break;
+
+      case "game":
+        DrawGame();
+        break;
+
+      case "lowRes":
+        DrawLowRes();
+        break;
+
+      case "filled":
+        DrawFilled();
+        break;
+
+      default:
+        console.error("Unknown mode:", currentMode);
+    }
+  }
+
+  // ---------------------------------------------------------------------------------------------------
+  // Set up the camera position and declare different camera positions for different modes.
+  let camera = {x: 0, y: 0, z: -10};
+
+  const cameraPositions = 
+  {
+    home: {x: 0, y: 0, z: -10},
+    game: {x: 0, y: 7, z: -12},
+    lowRes: {x: 0, y: 7, z: -12},
+    filled: {x: 0, y: 7, z: -12}
+  };
+
+  function SetCameraForMode(mode)
+  {
+    if (cameraPositions[mode]) 
+    {
+      camera = {...cameraPositions[mode]};
+    } 
+    else 
+    {
+      console.error("No camera position defined for mode:", mode);
+    }
+  }
+
+  // ---------------------------------------------------------------------------------------------------
+  // Objects for the home screen, including vertices and edges of a cube.
+  let vertices = 
+  [ 
+    { x:  1,  y: 1,  z: 1},   // A, idx 0
+    { x: -1,  y: 1,  z: 1},   // B, idx 1
+    { x:  1,  y: -1, z: 1},   // C, idx 2
+    { x: -1,  y: -1, z:  1},  // D, idx 3
+    { x:  1,  y: 1,  z: -1},  // E, idx 4
+    { x: -1,  y: 1,  z: -1},  // F, idx 5
+    { x:  1,  y: -1, z:  -1}, // G, idx 6
+    { x: -1,  y: -1, z: -1}   // H, idx 7
+  ];
+
+  // an array of the indices for the two vertices in each edge
+  let edges = 
+  [
+    [0, 1], //AB
+    [0, 2], //AC
+    [0, 4], //AE
+    [2, 3], //CD
+    [1, 3], //BD
+    [2, 6], //CG
+    [4, 5], //EF
+    [4, 6], //EG
+    [1, 5], //BF
+    [6, 7], //GH
+    [5, 7], //FH
+    [3, 7], //DH
+  ];
+
+  // ---------------------------------------------------------------------------------------------------
+  // Draw function for the home screen, which clears the canvas, projects 3D vertices to 2D, and draws edges.
+  function DrawHome()
+  {
+    //here we set up and clear the canvas, every draw frame
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#050510";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // here we will store u,v coordinates for the vertices, 
+    // projected onto our 2d plane
+    let projectedVertices = [];
+
+    // loop through the original vertices (X, Y, Z)
+    // and determine their position in 3D space relative to camera (x, y, z)
+    // then project them onto the 2D plane
+    for(let v = 0; v< vertices.length; v++)
+    {
+       console.log("original position:");
+       console.log( vertices[v] );
+
+       console.log("camera-relative position");
+       let camVert = {}; 
+       camVert.x = vertices[v].x - camera.x;
+       camVert.y = vertices[v].y - camera.y;
+       camVert.z = vertices[v].z - camera.z;
+       console.log( camVert );
+
+       console.log("projected position"); 
+       let canvasPos = {};
+       canvasPos.u = camVert.x / camVert.z;
+       canvasPos.v = camVert.y / camVert.z;
+       console.log( canvasPos );
+
+       console.log("scale and center"); 
+       canvasPos.u = canvasPos.u * canvas.width + canvas.width/2;
+       canvasPos.v = canvasPos.v * canvas.height + canvas.height/2;
+       console.log( canvasPos );
+
+       projectedVertices.push(canvasPos);
+       console.log("---------------"); 
+    }
+
+    // loop through the edges
+    // find the newly computed projected vertices - 2 per edge
+    // draw the line
+    for(let e = 0; e < edges.length; e++)
+    {
+      
+      //first vertex
+      let e1 = edges[e][0]; //idx
+      let u1 = projectedVertices[ e1 ].u; 
+      let v1 = canvas.height - projectedVertices[ e1 ].v;
+
+      //second vertex
+      let e2 = edges[e][1]; //idx
+      let u2 = projectedVertices[ e2 ].u;
+      let v2 = canvas.height - projectedVertices[ e2 ].v;
+
+      DrawLine(u1, v1, u2, v2);
+    }
+  }
+
+
+  // ---------------------------------------------------------------------------------------------------
+  // Objects for the game mode, including a position vector and a scalar variable for variation in sizing and future use.
+  // The objects here include: outer road lines, dashed road lines, blue driving car, side decoration buildings, green scoring cubes, and red spikes.
+
+  // Game speed
+  let gameSpeed = 0.45;
+
+  // Game state variables
+  let gameStarted = false;
+  let gameInterval = null;
+  const gameUpdateRate = 16;
+  const roadLength = 150;
+
+  // Outer road lines
+  let outerRoadLines =
+  {
+    position: {x: 0, y: 0, z: 0},
+    scalar: 1,
+    roadWidth: 12
+  };
+
+  // Dashed inner road lines
+  let dashedRoadLines = 
+  {
+    position: {x: 0, y: 0, z: 0},
+    scalar: 1,
+
+    laneWidth: 4,
+    dashLength: 3,
+    dashSpacing: 3
+  };
+
+  // Array for road dashes
+  let roadDashes = [];
+
+  // Lane positions and data
+  const lanePositions = 
+  {
+    left: -4,
+    center: 0,
+    right: 4
+  };
+
+  let currentLane = 1; // 0 for left, 1 for center, and 2 for right.
+
+  const lanes =
+  [
+    lanePositions.left,
+    lanePositions.center,
+    lanePositions.right
+  ]
+
+  // Car object and data
+  let car = 
+  {
+    position: {x: lanePositions.center, y: 0, z: 5},
+    scalar: 1,
+
+    body:
+    {
+      width: 2,
+      height: 1,
+      depth: 4
+    },
+
+    top:
+    {
+      width: 1.5,
+      height: 0.75,
+      depth: 2
+    }
+  };
+
+  let targetCarX = lanePositions.center;
+  let targetCameraX = lanePositions.center;
+
+  const movementSpeed = 0.4;
+
+  // Spikes for the player to avoid
+  let spikes = [];
+
+  // Green cubes for the player to collect
+  let cubes =[];
+
+  // Initial buildings for the side decoration
+  let startingBuildings =
+  [
+      // Left side
+    {
+      position: {x: -12, y: 0, z: 10},
+      scalar: 1.5,
+      side: "left"
+    },
+
+    {
+      position: {x: -12, y: 0, z: 25},
+      scalar: 2,
+      side: "left"
+    },
+
+    {
+      position: {x: -12, y: 0, z: 40},
+      scalar: 1.25,
+      side: "left"
+    },
+
+    {
+      position: {x: -12, y: 0, z: 55},
+      scalar: 1.75,
+      side: "left"
+    },
+
+    {
+      position: {x: -12, y: 0, z: 70},
+      scalar: 1.3,
+      side: "left"
+    },
+
+    // Right side
+    {
+      position: {x: 12, y: 0, z: 15},
+      scalar: 2,
+      side: "right"
+    },
+
+    {
+      position: {x: 12, y: 0, z: 30},
+      scalar: 1.3,
+      side: "right"
+    },
+
+    {
+      position: {x: 12, y: 0, z: 45},
+      scalar: 1.8,
+      side: "right"
+    },
+
+    {
+      position: {x: 12, y: 0, z: 60},
+      scalar: 1.2,
+      side: "right"
+    },
+
+    {
+      position: {x: 12, y: 0, z: 75},
+      scalar: 1.6,
+      side: "right"
+    }
+  ];
+
+  // Array for buildings
+  let buildings = [];
+
+  // ---------------------------------------------------------------------------------------------------
+  // Functions for the game. This includes draw functions and functions for game logic.
+
+  // Draw road function
+  function DrawRoad()
+  {
+    let roadStart = 0;
+    let roadEnd = roadLength;
+
+    let halfRoadWidth = outerRoadLines.roadWidth / 2;
+
+    // Left outer road line
+    let leftStart = ProjectVertex({x: -halfRoadWidth, y: 0, z: roadStart});
+    let leftEnd = ProjectVertex({x: -halfRoadWidth, y: 0, z: roadEnd});
+    DrawLine(leftStart.u, leftStart.v, leftEnd.u, leftEnd.v, "yellow");
+
+    // Right outer road line
+    let rightStart = ProjectVertex({x: halfRoadWidth, y: 0, z: roadStart});
+    let rightEnd = ProjectVertex({x: halfRoadWidth, y: 0, z: roadEnd});
+    DrawLine(rightStart.u, rightStart.v, rightEnd.u, rightEnd.v, "yellow");
+  }
+
+  // Draw dashed road lines function
+  function DrawDashedRoadLines()
+  {
+    for (let i = 0; i < roadDashes.length; i++) 
+    {
+      let dash = roadDashes[i];
+      let start = ProjectVertex({x: dash.position.x, y: dash.position.y, z: dash.position.z});
+      let dashEnd = ProjectVertex({x: dash.position.x, y: 0, z: dash.position.z + dashedRoadLines.dashLength});
+
+      DrawLine(start.u, start.v, dashEnd.u, dashEnd.v, "white");
+    }
+  }
+
+  // Draw box function for rectangles and cubes.
+  function DrawBox(position, width, height, depth, scalar, color)
+  {
+    let w = (width * scalar) / 2;
+    let h = height * scalar;
+    let d = (depth * scalar) / 2;
+
+    let boxVertices =
+    [
+      {x: position.x - w, y: position.y, z: position.z - d }, // Bottom left front
+      {x: position.x + w, y: position.y, z: position.z - d }, // Bottom right front
+      {x: position.x - w, y: position.y + h, z: position.z - d }, // Top left front
+      {x: position.x + w, y: position.y + h, z: position.z - d }, // Top right front
+
+      {x: position.x - w, y: position.y, z: position.z + d }, // Bottom left back
+      {x: position.x + w, y: position.y, z: position.z + d }, // Bottom right back
+      {x: position.x - w, y: position.y + h, z: position.z + d }, // Top left back
+      {x: position.x + w, y: position.y + h, z: position.z + d }  // Top right back
+    ];
+
+    let boxEdges =
+    [
+      [0, 1], [0, 2], [1, 3], [2, 3], // Front face
+      [4, 5], [4, 6], [5, 7], [6, 7], // Back face
+      [0, 4], [1, 5], [2, 6], [3, 7]  // Connecting edges
+    ];
+
+    let projectedVertices = [];
+
+    for(let i = 0; i < boxVertices.length; i++)
+    {
+      projectedVertices.push(ProjectVertex(boxVertices[i]));
+    }
+
+    for(let i = 0; i < boxEdges.length; i++)
+    {
+      let first = boxEdges[i][0];
+      let second = boxEdges[i][1];
+
+      DrawLine(projectedVertices[first].u, projectedVertices[first].v, projectedVertices[second].u, projectedVertices[second].v, color);
+    }
+  }
+
+  // Draw car function
+  function DrawCar()
+  {
+    // Draw main body of the car
+    DrawBox(car.position, car.body.width, car.body.height, car.body.depth, car.scalar, "blue");
+
+    // Draw top of the car
+    let topPosition = {x: car.position.x, y: car.position.y + car.body.height, z: car.position.z };
+    DrawBox(topPosition, car.top.width, car.top.height, car.top.depth, car.scalar, "blue");
+  }
+
+  // Draw cubes function
+  function DrawCubes()
+  {
+    for (let i = 0; i < cubes.length; i++) 
+    {
+      DrawBox(cubes[i].position, 2, 2, 2, cubes[i].scalar, "lime");
+    }
+  }
+
+  // Draw spike function
+  function DrawSpike(spike)
+  {
+    let size = spike.scalar;
+
+    let x = spike.position.x;
+    let y = spike.position.y;
+    let z = spike.position.z;
+
+    let vertices =
+    [
+      {x: x - size, y: y, z: z - size}, // Bottom left front
+      {x: x + size, y: y, z: z - size}, // Bottom right front
+      {x: x - size, y: y, z: z + size}, // Bottom left back
+      {x: x + size, y: y, z: z + size}, // Bottom right back
+      {x: x, y: y + size * 3, z: z} // Top point
+    ];
+
+    let edges =
+    [
+      [0, 1], [1, 3], [3, 2], [2, 0], // Base square
+      [0, 4], [1, 4], [2, 4], [3, 4]  // Sides to top point
+    ];
+
+    let projectedVertices = [];
+
+    for(let i = 0; i < vertices.length; i++)
+    {
+      projectedVertices.push(ProjectVertex(vertices[i]));
+    }
+
+    for(let i = 0; i < edges.length; i++)
+    {
+      let first = edges[i][0];
+      let second = edges[i][1];
+
+      DrawLine(projectedVertices[first].u, projectedVertices[first].v, projectedVertices[second].u, projectedVertices[second].v, "red");
+    }
+  }
+
+  // Function to draw spikes
+  function DrawSpikes()
+  {
+    for (let i = 0; i < spikes.length; i++) 
+    {
+      DrawSpike(spikes[i]);
+    }
+  }
+
+  // Draw window function
+  function DrawWindow(x, y, z, width, height)
+  {
+    let windowVertices =
+    [
+      {x: x - width / 2, y: y, z: z}, // Bottom left
+      {x: x + width / 2, y: y, z: z}, // Bottom right
+      {x: x - width / 2, y: y + height, z: z}, // Top left
+      {x: x + width / 2, y: y + height, z: z} // Top right
+    ];
+
+    let windowEdges =
+    [
+      [0, 1], [0, 2], [1, 3], [2, 3]
+    ];
+
+    let projectedVertices = [];
+
+    for(let i = 0; i < windowVertices.length; i++)
+    {
+      projectedVertices.push(ProjectVertex(windowVertices[i]));
+    }
+
+    for(let i = 0; i < windowEdges.length; i++)
+    {
+      let first = windowEdges[i][0];
+      let second = windowEdges[i][1];
+
+      DrawLine(projectedVertices[first].u, projectedVertices[first].v, projectedVertices[second].u, projectedVertices[second].v, "yellow");
+    }
+  }
+
+  // Draw windows function
+  function DrawWindows(building)
+  {
+    let buildingWidth = 3 * building.scalar;
+    let buildingHeight = 8 * building.scalar;
+    let buildingDepth = 4 * building.scalar;
+
+    let frontZ = building.position.z - buildingDepth / 2 - 0.01; // Slightly in front of the building
+
+    // Window dimensions relative to building size
+    let windowWidth = buildingWidth * 0.2;
+    let windowHeight = buildingHeight * 0.15;
+
+    // Horizontal positons for windows in 2 columns
+    let leftWindowX = building.position.x - buildingWidth * 0.22;
+    let rightWindowX = building.position.x + buildingWidth * 0.22;
+
+    // Vertical positions for windows in 3 rows
+    let bottomWindowY = building.position.y + buildingHeight * 0.15;
+    let middleWindowY = building.position.y + buildingHeight * 0.42;
+    let topWindowY = building.position.y + buildingHeight * 0.69;
+
+    // Draw bottom row windows
+    DrawWindow(leftWindowX, bottomWindowY, frontZ, windowWidth, windowHeight);
+    DrawWindow(rightWindowX, bottomWindowY, frontZ, windowWidth, windowHeight);
+
+    // Draw middle row windows
+    DrawWindow(leftWindowX, middleWindowY, frontZ, windowWidth, windowHeight);
+    DrawWindow(rightWindowX, middleWindowY, frontZ, windowWidth, windowHeight);
+
+    // Draw top row windows
+    DrawWindow(leftWindowX, topWindowY, frontZ, windowWidth, windowHeight);
+    DrawWindow(rightWindowX, topWindowY, frontZ, windowWidth, windowHeight);
+  }
+
+  // Draw starting buildings function
+  function DrawBuildings()
+  {
+    for (let i = 0; i < buildings.length; i++) 
+    {
+      DrawBox(buildings[i].position, 3, 8, 4, buildings[i].scalar, "#888888");
+
+      // Draw windows for each building
+      DrawWindows(buildings[i]);
+    }
+  }
+
+  // Draw game function
+  function DrawGame()
+  {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#050510";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    DrawRoad();
+    DrawDashedRoadLines();
+
+    DrawBuildings();
+
+    DrawCubes();
+    DrawSpikes();
+
+    DrawCar();
+  }
+
+  // Move buildings function
+  function MoveBuildings()
+  {
+    // Implementation for moving buildings
+    for (let i = 0; i < buildings.length; i++) 
+    {
+      buildings[i].position.z -= gameSpeed;
+    }
+  }
+
+  // Delete buildings function
+  function DeleteBuildings()
+  {
+    // Implementation for deleting buildings
+    const buildingDeleteZ = -8; // Z position at which buildings are considered "behind" the camera
+    for (let i = buildings.length - 1; i >= 0; i--) 
+    {
+      if (buildings[i].position.z < buildingDeleteZ) 
+      {
+        buildings.splice(i, 1);
+      }
+    }
+  }
+
+  // Generate building function
+  function GenerateBuilding(side, zPosition)
+  {
+    let newBuilding = 
+    {
+      position: {x: side === "left" ? -12 : 12, y: 0, z: zPosition},
+      scalar: Math.random() + 1, // Random scalar between 1 and 2.0
+      side: side
+    };
+
+    buildings.push(newBuilding);
+  }
+
+  // Generate buildings function
+  const buildingGenerationZ = roadLength; // Z position at which new buildings are generated
+  const buildingSpacing = 15; // Spacing between buildings
+  function GenerateBuildings()
+  {
+    let farthestLeftZ = -Infinity;
+    let farthestRightZ = -Infinity;
+
+    for (let i = 0; i < buildings.length; i++) 
+    {
+      if (buildings[i].side === "left" && buildings[i].position.z > farthestLeftZ) 
+      {
+        farthestLeftZ = buildings[i].position.z;
+      }
+      if (buildings[i].side === "right" && buildings[i].position.z > farthestRightZ) 
+      {
+        farthestRightZ = buildings[i].position.z;
+      }
+    }
+
+    if (farthestLeftZ < buildingGenerationZ) 
+    {
+      GenerateBuilding("left", farthestLeftZ + buildingSpacing);
+    }
+
+    if (farthestRightZ < buildingGenerationZ) 
+    {
+      GenerateBuilding("right", farthestRightZ + buildingSpacing);
+    }
+  }
+
+  // Function to reset buildings
+  function ResetBuildings()
+  {
+    buildings = [];
+
+    for (let i = 0; i < startingBuildings.length; i++)
+    {
+      buildings.push({position: {x: startingBuildings[i].position.x, y: startingBuildings[i].position.y, z: startingBuildings[i].position.z}, scalar: startingBuildings[i].scalar, side: startingBuildings[i].side});
+    }
+  }
+
+  // Function to initialize road dashes
+  function InitializeDashedRoadLines()
+  {
+    roadDashes = [];
+
+    let roadEnd = roadLength;
+    let spacing = dashedRoadLines.dashLength + dashedRoadLines.dashSpacing;
+
+    for (let z = 0; z < roadEnd; z += spacing) 
+    {
+      roadDashes.push({position: {x: -2, y: 0, z: z}});
+      roadDashes.push({position: {x: 2, y: 0, z: z}});
+    }
+  }
+
+  // Function to move the dashed road lines
+  function MoveRoadDashes()
+  {
+    for (let i = 0; i < roadDashes.length; i++)
+    {
+      roadDashes[i].position.z -= gameSpeed;
+    }
+
+    // Recycle dashes that have passed the visible area
+    for (let i = 0; i < roadDashes.length; i++)
+    {
+      if (roadDashes[i].position.z + dashedRoadLines.dashLength < -8)
+      {
+        let farthestZ = -Infinity;
+
+        // Find farthest dash in same lane
+        for (let j = 0; j < roadDashes.length; j++)
+        {
+          if (roadDashes[j].position.x === roadDashes[i].position.x && roadDashes[j].position.z > farthestZ)
+          {
+            farthestZ = roadDashes[j].position.z;
+          }
+        }
+
+        roadDashes[i].position.z = farthestZ + dashedRoadLines.dashLength + dashedRoadLines.dashSpacing;
+      }
+    }
+  }
+
+  // Function to assist "sections" of obstacles be generated
+  function RandomLane()
+  {
+    let randomIndex = Math.floor(Math.random() * 3);
+
+    return lanes[randomIndex];
+  }
+
+  // Variables for obstacle generation
+  const obstacleSpacing = 35;
+
+  // Function to generate the obstacle
+  function GenerateObstacle(zPosition)
+  {
+    let cubeLane = RandomLane(); // The objective cube will generate in a random lane
+
+    // Add the objective cube
+    cubes.push({position: {x: cubeLane, y: 0, z: zPosition}, scalar: 1});
+
+    let spikeCount = Math.floor(Math.random() * 2) + 1; // Add a chance for there to be 2 spikes
+    let availableSpikeLanes = [];
+
+    for (let i = 0; i < lanes.length; i++)
+    {
+      if (lanes[i] !== cubeLane) // Make sure they dont generate in the cube lane
+      {
+        availableSpikeLanes.push(lanes[i]);
+      }
+    }
+
+    // Add the spikes to the array
+    if (spikeCount === 1)
+    {
+      let randomSpikeLane = Math.floor(Math.random() * availableSpikeLanes.length);
+
+      spikes.push({position: {x: availableSpikeLanes[randomSpikeLane], y: 0, z: zPosition - 10}, scalar: 1});
+    }
+    else
+    {
+      for (let i = 0; i < availableSpikeLanes.length; i++)
+      {
+        spikes.push({position: {x: availableSpikeLanes[i], y: 0, z: zPosition - 10}, scalar: 1});
+      }
+    }
+  }
+
+  // Function to generate obstacles
+  function GenerateObstacles()
+  {
+    let farthestCubeZ = -Infinity;
+
+    // Locate the green cube farthest down the road
+    for (let i = 0; i < cubes.length; i++)
+    {
+      if (cubes[i].position.z > farthestCubeZ)
+      {
+        farthestCubeZ = cubes[i].position.z;
+      }
+    }
+
+    // If there are no cubes, start at z = 50
+    if (farthestCubeZ === -Infinity)
+    {
+      farthestCubeZ = 50 - obstacleSpacing;
+    }
+
+    // Fill the road in with cubes
+    while (farthestCubeZ + obstacleSpacing < roadLength)
+    {
+      farthestCubeZ += obstacleSpacing;
+
+      GenerateObstacle(farthestCubeZ);
+    }
+  }
+
+  // Function to move the obstacles
+  function MoveObstacles()
+  {
+    for(let i = 0; i < cubes.length; i++)
+    {
+      cubes[i].position.z -= gameSpeed;
+    }
+
+    for(let i = 0; i < spikes.length; i++)
+    {
+      spikes[i].position.z -= gameSpeed;
+    }
+  }
+
+  // Function to delete obstacles
+  function DeleteObstacles()
+  {
+    const spikeDeleteZ = -8
+
+    for (let i = spikes.length - 1; i >= 0; i--)
+    {
+      if (spikes[i].position.z < spikeDeleteZ)
+      {
+        spikes.splice(i, 1);
+      }
+    }
+  }
+
+  // Variables for collision detection
+  const collisionDistance = 3;
+
+  // Function to check for cube collisions
+  function CheckCubeCollisions()
+  {
+    for(let i = cubes.length - 1; i >= 0; i--)
+    {
+      let xDistance = Math.abs(cubes[i].position.x - car.position.x);
+      let sameLane = xDistance < 1.5;
+
+      let zDistance = Math.abs(cubes[i].position.z - car.position.z);
+
+      if(sameLane && zDistance < collisionDistance)
+      {
+        cubes.splice(i, 1);
+      }
+    }
+  }
+
+  // Function to check for spike collisions
+  function CheckSpikeCollisions()
+  {
+    for(let i = spikes.length - 1; i >= 0; i--)
+    {
+      let xDistance = Math.abs(spikes[i].position.x - car.position.x);
+      let sameLane = xDistance < 1.5;
+
+      let zDistance = Math.abs(spikes[i].position.z - car.position.z);
+
+      if(sameLane && zDistance < collisionDistance)
+      {
+        ResetGame();
+        return true;
+      }
+    }
+
+    return false;
+  }
+  
+  // Function that checks if a cube wasn't hit
+  function CheckMissedCubes()
+  {
+    for(let i = 0; i < cubes.length; i++)
+    {
+      if(cubes[i].position.z < 1)
+      {
+        ResetGame();
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  // Function to move the car left
+  function MoveCarLeft()
+  {
+    if(currentLane > 0)
+    {
+      currentLane--;
+
+      targetCarX = lanes[currentLane]
+      targetCameraX = lanes[currentLane];
+    }
+  }
+
+  // Function to move the car right
+  function MoveCarRight()
+  {
+    if(currentLane < 2)
+    {
+      currentLane++;
+
+      targetCarX = lanes[currentLane];
+      targetCameraX = lanes[currentLane];
+    }
+  }
+
+  // Function to handle the car and camera movement
+  function UpdateCarMovement()
+  {
+    // Move car toward target position
+    if (car.position.x < targetCarX)
+    {
+      car.position.x += movementSpeed;
+
+      if (car.position.x > targetCarX)
+      {
+        car.position.x = targetCarX;
+      }
+    }
+    else if (car.position.x > targetCarX)
+    {
+      car.position.x -= movementSpeed;
+
+      if (car.position.x < targetCarX)
+      {
+        car.position.x = targetCarX;
+      }
+    }
+
+
+    // Move camera toward target position
+    if (camera.x < targetCameraX)
+    {
+      camera.x += movementSpeed;
+
+      if (camera.x > targetCameraX)
+      {
+        camera.x = targetCameraX;
+      }
+    }
+    else if (camera.x > targetCameraX)
+    {
+      camera.x -= movementSpeed;
+
+      if (camera.x < targetCameraX)
+      {
+        camera.x = targetCameraX;
+      }
+    }
+  }
+
+  // Function to update the canvas
+  function UpdateGame()
+  {
+    // Car movement
+    UpdateCarMovement();
+
+    // Move the setting
+    MoveBuildings();
+    DeleteBuildings();
+    GenerateBuildings();
+    MoveRoadDashes();
+
+    // Move obstacles and delete old ones
+    MoveObstacles();
+    DeleteObstacles();
+
+    // Check for spike collisions
+    if (CheckSpikeCollisions())
+    {
+      return;
+    }
+
+    // Check for cube collection
+    CheckCubeCollisions();
+
+    // Check for missed cubes
+    if (CheckMissedCubes())
+    {
+      return;
+    }
+
+    // Generate new obstacles
+    GenerateObstacles();
+
+    // Draw the frame
+    if (currentMode === "game")
+    {
+      DrawGame();
+    }
+    else if (currentMode === "lowRes")
+    {
+      DrawLowRes();
+    }
+    else if (currentMode === "filled")
+    {
+      DrawFilled();
+    }
+  }
+
+  // Function to start the game
+  function StartGame()
+  {
+    if(gameStarted === false)
+    {
+      gameStarted = true;
+
+      gameInterval = setInterval(UpdateGame, gameUpdateRate);
+
+      console.log("Game Started");
+    }
+  }
+
+  // Function to stop the game
+  function StopGame()
+  {
+    if (gameStarted === true)
+    {
+      gameStarted = false;
+
+      clearInterval(gameInterval);
+      gameInterval = null;
+
+      console.log("Game Stopped");
+    }
+  }
+
+  // Function to reset the game
+  function ResetGame()
+  {
+    // Stop the game
+    StopGame();
+
+    ResetBuildings();
+    InitializeDashedRoadLines();
+
+    currentLane = 1;
+
+    car.position.x = lanePositions.center;
+    car.position.y = 0;
+    car.position.z = 5;
+
+    targetCarX = lanePositions.center;
+    targetCameraX = lanePositions.center;
+
+    SetCameraForMode("game");
+
+    spikes = [];
+    cubes = [];
+
+    GenerateObstacles();
+
+    // Reset road dashes
+    InitializeDashedRoadLines();
+
+    // Reset Car
+    currentLane = 1;
+    car.position.x = lanePositions.center;
+    car.position.y = 0;
+    car.position.z = 5;
+
+    // Reset camera
+    SetCameraForMode("game");
+
+    // Draw original scene
+    if (currentMode === "game")
+    {
+      DrawGame();
+    }
+    else if (currentMode === "lowRes")
+    {
+      DrawLowRes();
+    }
+    else if (currentMode === "filled")
+    {
+      DrawFilled();
+    }
+
+    console.log("Game Reset");
+  }
+
+  // ---------------------------------------------------------------------------------------------------
+  // Set up the pixel grid for the low-resolution mode
+  const rows = 200;
+  const columns = 320;
+  const pixelGrid = Array.from({length: columns}, () => Array(rows).fill("#050510"));
+  let seePixelOutline = false;
+
+  // Draw function for the pixel grid
+  function DrawPixelGrid()
+  {
+    // here we set up and clear the canvas, every draw frame
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#050510";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "#444444";
+
+    for(let v = 0; v < rows; v++)
+    {
+      for(let u = 0; u < columns; u++)
+      {
+        // if you want to see what is going on
+        // console.log(u);
+        // console.log(v);
+        // console.log(pixelGrid[u][v]);
+        // console.log("----")
+        ctx.fillStyle = pixelGrid[u][v];
+        ctx.fillRect(u * 5, v * 5, 5, 5);
+
+        if( seePixelOutline ){
+          ctx.strokeRect(u * 5, v * 5, 5, 5);
+        }
+      }
+    }
+  }
+
+  // Function to clear the pixel grid
+  function ClearPixelGrid()
+  {
+    for(let v = 0; v < rows; v++)
+    {
+      for(let u = 0; u < columns; u++)
+      {
+        pixelGrid[u][v] = "#050510";
+      }
+    }
+  }
+
+  // Function to set the color of pixels, now also works for filled mode
+  function SetPixelColor(u, v, color)
+  {
+    if (u >= 0 && u < columns && v >= 0 && v < rows)
+    {
+      if(currentMode === "filled")
+      {
+        colorBuffer[u][v] = color;
+      }
+      else
+      {
+        pixelGrid[u][v] = color;
+      }
+    }
+  }
+
+  // Function to make lines on the pixel grid
+  function DrawLowResLine(u1, v1, u2, v2, color)
+  {
+    // Divide the 1600 x 1000 cords into 320 x 200.
+    u1 = u1 / 5;
+    v1 = v1 / 5;
+    u2 = u2 / 5;
+    v2 = v2 / 5;
+
+    let du = u2 - u1;
+    let dv = v2 - v1;
+
+    let moves = Math.max(Math.abs(du), Math.abs(dv)); // Find which line direction is bigger, u or v. Instead of assuming one axis is greater than the other, find out which is more prominent, and use that one.
+
+    if(moves === 0)
+    {
+      SetPixelColor(Math.round(u1), Math.round(v1), color);
+      return;
+    }
+
+    let uInc = du / moves;
+    let vInc = dv / moves;
+
+    let u = u1;
+    let v = v1;
+
+    for(let i = 0; i <= moves; i++)
+    {
+      SetPixelColor(Math.round(u), Math.round(v), color);
+      
+      u += uInc;
+      v += vInc;
+    }
+  }
+
+  // Draw function for low-resolution
+  function DrawLowRes()
+  {
+    ClearPixelGrid();
+
+    DrawRoad();
+    DrawDashedRoadLines();
+
+    DrawBuildings();
+
+    DrawCubes();
+    DrawSpikes();
+
+    DrawCar();
+
+    DrawPixelGrid();
+  }
+
+  // ---------------------------------------------------------------------------------------------------
+  // Code for the filled version of the game.
+
+  // Buffers for filled mode
+  const filledRows = 200;
+  const filledColumns = 320;
+
+  // Store color for each pixel
+  const colorBuffer = Array.from({length: filledColumns}, () => Array(filledRows).fill("#050510"));
+
+  // Store the depth of each pixel
+  const depthBuffer = Array.from({length: filledColumns}, () => Array(filledRows).fill(Infinity));
+
+  // Function to clear buffers
+  function ClearFilledBuffers()
+  {
+    for(let v = 0; v < filledRows; v++)
+    {
+      for(let u = 0; u < filledColumns; u++)
+      {
+        colorBuffer[u][v] = "#050510";
+        depthBuffer[u][v] = Infinity;
+      }
+    }
+  }
+
+  // Function to manage our half plane math
+  function HalfPlane(point, vertex1, vertex2)
+  {
+    return (point.u - vertex1.u) * (vertex2.v - vertex1.v) - (point.v - vertex1.v) * (vertex2.u - vertex1.u);
+  }
+
+  // Function that uses barycentric coordinates to interpolate color
+  function InterpolateColor(color1, color2, color3, alpha, beta, gamma)
+  {
+    let red = alpha * color1.r + beta * color2.r + gamma * color3.r;
+
+    let green = alpha * color1.g + beta * color2.g + gamma * color3.g;
+
+    let blue = alpha * color1.b + beta * color2.b + gamma * color3.b;
+
+    return "rgb(" + Math.round(red) + "," + Math.round(green) + "," + Math.round(blue) + ")";
+  }
+
+  // Function that draws a filled triangle
+  function DrawFilledTriangle(vertex1, vertex2, vertex3, color1, color2, color3)
+  {
+    // Convert from 1600 x 1000 coordinates to 320 x 200 coordinates
+    let v1 = {u: vertex1.u / 5, v: vertex1.v / 5, z: vertex1.z};
+    let v2 = {u: vertex2.u / 5, v: vertex2.v / 5, z: vertex2.z};
+    let v3 = {u: vertex3.u / 5, v: vertex3.v / 5, z: vertex3.z};
+
+    // Find the box around the triangle
+    let minU = Math.floor(Math.min(v1.u, v2.u, v3.u));
+    let maxU = Math.ceil(Math.max(v1.u, v2.u, v3.u));
+
+    let minV = Math.floor(Math.min(v1.v, v2.v, v3.v));
+    let maxV = Math.ceil(Math.max(v1.v, v2.v, v3.v));
+
+    // Keep the box inside our 320 x 200 screen
+    minU = Math.max(minU, 0);
+    maxU = Math.min(maxU, filledColumns - 1);
+
+    minV = Math.max(minV, 0);
+    maxV = Math.min(maxV, filledRows - 1);
+
+    // Test every pixel inside the box
+    for(let v = minV; v <= maxV; v++)
+    {
+      for(let u = minU; u <= maxU; u++)
+      {
+        let point = {u: u, v: v};
+
+        let edge1 = HalfPlane(point, v1, v2);
+        let edge2 = HalfPlane(point, v2, v3);
+        let edge3 = HalfPlane(point, v3, v1);
+
+        // Point is inside if all half-plane results share the same sign
+        let allPositive = edge1 >= 0 && edge2 >= 0 && edge3 >= 0;
+        let allNegative = edge1 <= 0 && edge2 <= 0 && edge3 <= 0;
+
+        if(allPositive || allNegative)
+        {
+          // We know this pixel is inside the triangle so calculate barycentric coordinates
+          let area = HalfPlane(v1, v2, v3);
+
+          if(area === 0)
+          {
+            continue;
+          }
+
+          let alpha = HalfPlane(point, v2, v3) / area;
+          let beta = HalfPlane(point, v3, v1) / area;
+          let gamma = HalfPlane(point, v1, v2) / area;
+
+          // Get the depth at this pixel
+          let pixelZ = alpha * v1.z + beta * v2.z + gamma * v3.z;
+
+          // Z-buffer test
+          if(pixelZ < depthBuffer[u][v])
+          {
+            depthBuffer[u][v] = pixelZ;
+
+            let pixelColor = InterpolateColor(color1, color2, color3, alpha, beta, gamma);
+            colorBuffer[u][v] = pixelColor;
+          }
+        }
+      }
+    }
+  }
+
+  // Draw function for the filled pixel grid
+  function DrawFilledPixelGrid()
+  {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = "#050510";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    for(let v = 0; v < filledRows; v++)
+    {
+      for(let u = 0; u < filledColumns; u++)
+      {
+        ctx.fillStyle = colorBuffer[u][v];
+        ctx.fillRect(u * 5, v * 5, 5, 5);
+      }
+    }
+  }
+
+  // Draw function for the filled in game.
+  function DrawFilled()
+  {
+    ClearFilledBuffers();
+
+    // Filled road
+    DrawFilledRoad();
+
+    // Road markings drawn over the road
+    DrawRoad();
+    DrawDashedRoadLines();
+
+    DrawFilledBuildings();
+    DrawFilledCubes();
+    DrawFilledSpikes();
+    DrawFilledCar();
+
+    // Display the completed buffer
+    DrawFilledPixelGrid();
+  }
+
+  // Function that draws a filled in version of the road.
+    function DrawFilledRoad()
+  {
+    let roadColor = {r: 48, g: 48, b: 48};
+    let roadStart = 0;
+    let roadEnd = roadLength;
+
+    let halfRoadWidth = outerRoadLines.roadWidth / 2;
+
+    // Four corners of the road
+    let nearLeft = ProjectVertex({x: -halfRoadWidth, y: 0, z: roadStart});
+    let nearRight = ProjectVertex({x: halfRoadWidth, y: 0, z: roadStart});
+    let farLeft = ProjectVertex({x: -halfRoadWidth, y: 0, z: roadEnd});
+    let farRight = ProjectVertex({x: halfRoadWidth, y: 0, z: roadEnd});
+
+    // Split the rectangular road into two triangles
+    DrawFilledTriangle(nearLeft, nearRight, farLeft, roadColor, roadColor, roadColor);
+
+    DrawFilledTriangle(nearRight, farRight, farLeft, roadColor, roadColor, roadColor);
+  }
+
+  // Function to draw in a filled box
+  function DrawFilledBox(position, width, height, depth, scalar, color)
+  {
+    let w = (width * scalar) / 2;
+    let h = height * scalar;
+    let d = (depth * scalar) / 2;
+
+    // Same 8 vertices used by DrawBox method
+    let boxVertices =
+    [
+      {x: position.x - w, y: position.y, z: position.z - d}, // 0 Bottom left front
+      {x: position.x + w, y: position.y, z: position.z - d}, // 1 Bottom right front
+      {x: position.x - w, y: position.y + h, z: position.z - d}, // 2 Top left front
+      {x: position.x + w, y: position.y + h, z: position.z - d}, // 3 Top right front
+
+      {x: position.x - w, y: position.y, z: position.z + d}, // 4 Bottom left back
+      {x: position.x + w, y: position.y, z: position.z + d}, // 5 Bottom right back
+      {x: position.x - w, y: position.y + h, z: position.z + d}, // 6 Top left back
+      {x: position.x + w, y: position.y + h, z: position.z + d}  // 7 Top right back
+    ];
+
+    // Vertex colors for the box
+    let vertexColors =
+    [
+      {r: color.r * 0.55, g: color.g * 0.55, b: color.b * 0.55}, // 0
+      {r: color.r * 0.75, g: color.g * 0.75, b: color.b * 0.75}, // 1
+      {r: color.r * 0.85, g: color.g * 0.85, b: color.b * 0.85}, // 2
+      {r: color.r, g: color.g, b: color.b}, // 3
+
+      {r: color.r * 0.45, g: color.g * 0.45, b: color.b * 0.45}, // 4
+      {r: color.r * 0.65, g: color.g * 0.65, b: color.b * 0.65}, // 5
+      {r: color.r * 0.75, g: color.g * 0.75, b: color.b * 0.75}, // 6
+      {r: color.r * 0.90, g: color.g * 0.90, b: color.b * 0.90}  // 7
+    ];
+
+    // Each rectangular face is made from two triangles
+    let boxTriangles =
+    [
+      [0, 1, 2], [1, 3, 2], // Front
+      [4, 6, 5], [5, 6, 7], // Back
+      [0, 2, 4], [2, 6, 4], // Left
+      [1, 5, 3], [3, 5, 7], // Right
+      [2, 3, 6], [3, 7, 6], // Top
+      [0, 4, 1], [1, 4, 5] // Bottom
+    ];
+
+    let projectedVertices = [];
+
+    // Project all 8 vertices
+    for(let i = 0; i < boxVertices.length; i++)
+    {
+      projectedVertices.push(ProjectVertex(boxVertices[i]));
+    }
+
+    // Fill all triangles
+    for(let i = 0; i < boxTriangles.length; i++)
+    {
+      let first = boxTriangles[i][0];
+      let second = boxTriangles[i][1];
+      let third = boxTriangles[i][2];
+
+      DrawFilledTriangle(projectedVertices[first], projectedVertices[second], projectedVertices[third], vertexColors[first], vertexColors[second], vertexColors[third]);
+    }
+  }
+
+  // Function to draw filled buildings
+  function DrawFilledBuildings()
+  {
+    for(let i = 0; i < buildings.length; i++)
+    {
+      DrawFilledBox(buildings[i].position, 3, 8, 4, buildings[i].scalar, {r: 136, g: 136, b: 136});
+      DrawFilledWindows(buildings[i]);
+    }
+  }
+
+  // Function to draw a filled in window on a building
+  function DrawFilledWindow(x, y, z, width, height)
+  {
+    let windowVertices =
+    [
+      {x: x - width / 2, y: y, z: z}, // Bottom left
+      {x: x + width / 2, y: y, z: z}, // Bottom right
+      {x: x - width / 2, y: y + height, z: z}, // Top left
+      {x: x + width / 2, y: y + height, z: z}  // Top right
+    ];
+
+    let windowColor = {r: 255, g: 255, b: 0};
+
+    let projectedVertices = [];
+
+    for(let i = 0; i < windowVertices.length; i++)
+    {
+      projectedVertices.push(ProjectVertex(windowVertices[i]));
+    }
+
+    // First half
+    DrawFilledTriangle(projectedVertices[0], projectedVertices[1], projectedVertices[2], windowColor, windowColor, windowColor);
+
+    // Second half
+    DrawFilledTriangle(projectedVertices[1], projectedVertices[3], projectedVertices[2], windowColor, windowColor, windowColor);
+  }
+
+  // Function that adds the filled in windows
+  function DrawFilledWindows(building)
+  {
+    let buildingWidth = 3 * building.scalar;
+    let buildingHeight = 8 * building.scalar;
+    let buildingDepth = 4 * building.scalar;
+
+    // Slightly in front of building face
+    let frontZ = building.position.z - buildingDepth / 2 - 0.01;
+
+    let windowWidth = buildingWidth * 0.2;
+    let windowHeight = buildingHeight * 0.15;
+
+    let leftWindowX = building.position.x - buildingWidth * 0.22;
+    let rightWindowX = building.position.x + buildingWidth * 0.22;
+    let bottomWindowY = building.position.y + buildingHeight * 0.15;
+    let middleWindowY = building.position.y + buildingHeight * 0.42;
+    let topWindowY = building.position.y + buildingHeight * 0.69;
+
+    // Bottom row
+    DrawFilledWindow(leftWindowX, bottomWindowY, frontZ, windowWidth, windowHeight);
+    DrawFilledWindow(rightWindowX, bottomWindowY, frontZ, windowWidth, windowHeight);
+
+    // Middle row
+    DrawFilledWindow(leftWindowX, middleWindowY, frontZ, windowWidth, windowHeight);
+    DrawFilledWindow(rightWindowX, middleWindowY, frontZ, windowWidth, windowHeight);
+
+    // Top row
+    DrawFilledWindow(leftWindowX, topWindowY, frontZ, windowWidth, windowHeight);
+    DrawFilledWindow(rightWindowX, topWindowY, frontZ, windowWidth, windowHeight);
+  }
+
+  // Function to draw filled cubes
+  function DrawFilledCubes()
+  {
+    for(let i = 0; i < cubes.length; i++)
+    {
+      DrawFilledBox(cubes[i].position, 2, 2, 2, cubes[i].scalar, {r: 0, g: 255, b: 0});
+    }
+  }
+
+  // Function to draw in a filled car
+  function DrawFilledCar()
+  {
+    // Main body
+    DrawFilledBox(car.position, car.body.width, car.body.height, car.body.depth, car.scalar, {r: 0, g: 80, b: 255});
+
+    // Top of car
+    let topPosition = {x: car.position.x, y: car.position.y + car.body.height, z: car.position.z};
+
+    DrawFilledBox(topPosition, car.top.width, car.top.height, car.top.depth, car.scalar, {r: 0, g: 80, b: 255});
+  }
+
+  // Function to draw a filled in spike
+  function DrawFilledSpike(spike)
+  {
+    let size = spike.scalar;
+
+    let x = spike.position.x;
+    let y = spike.position.y;
+    let z = spike.position.z;
+
+    let vertices =
+    [
+      {x: x - size, y: y, z: z - size},
+      {x: x + size, y: y, z: z - size},
+      {x: x - size, y: y, z: z + size},
+      {x: x + size, y: y, z: z + size},
+      {x: x, y: y + size * 3, z: z}
+    ];
+
+    let vertexColors =
+    [
+      {r: 130, g: 0, b: 0}, // 0
+      {r: 180, g: 0, b: 0}, // 1
+      {r: 100, g: 0, b: 0}, // 2
+      {r: 150, g: 0, b: 0}, // 3
+      {r: 255, g: 0, b: 0}  // 4
+    ];
+
+    let triangles =
+    [
+      [0, 1, 4], // Four triangular sides
+      [1, 3, 4],
+      [3, 2, 4],
+      [2, 0, 4],
+
+      [0, 2, 1], // Bottom
+      [1, 2, 3]
+    ];
+
+    let projectedVertices = [];
+
+    for(let i = 0; i < vertices.length; i++)
+    {
+      projectedVertices.push(ProjectVertex(vertices[i]));
+    }
+
+    for(let i = 0; i < triangles.length; i++)
+    {
+      let first = triangles[i][0];
+      let second = triangles[i][1];
+      let third = triangles[i][2];
+
+      DrawFilledTriangle(projectedVertices[first], projectedVertices[second], projectedVertices[third], vertexColors[first], vertexColors[second], vertexColors[third]);
+    }
+  }
+
+  // Function to draw filled in spikes
+  function DrawFilledSpikes()
+  {
+    for(let i = 0; i < spikes.length; i++)
+    {
+      DrawFilledSpike(spikes[i]);
+    }
+  }
+
+  // ---------------------------------------------------------------------------------------------------
+  //this is how we detect events- 
+    document.addEventListener("keydown", (event) => {
+
+      event.preventDefault();
+       switch (event.key) {
+        case "ArrowUp":
+          if (currentMode === "home")
+          {
+            // Change camera z position a go closer
+            camera.z += 1; // Move camera closer.
+            console.log("Up arrow pressed");
+            Draw();
+          }
+          break;
+        case "ArrowDown":
+          if (currentMode === "home")
+          {
+            // Change camera z position go further away
+            camera.z -= 1; // Move camera farther away.
+            console.log("Down arrow pressed");
+            Draw();
+          }
+          break;
+        case "ArrowLeft":
+          if (currentMode === "game" || currentMode === "lowRes" || currentMode === "filled" && gameStarted === true) // Move car left
+          {
+            MoveCarLeft();
+          }
+          else
+          {
+            camera.x -= 1; // Move camera to the left.
+            console.log("Left arrow pressed");
+            Draw();
+          }
+          break;
+        case "ArrowRight":
+          if (currentMode === "game" || currentMode === "lowRes" || currentMode === "filled" && gameStarted === true) // Move car right
+          {
+            MoveCarRight();
+          }
+          else
+          {
+            camera.x += 1; // Move camera to the right.
+            console.log("Left arrow pressed");
+            Draw();
+          }
+          break;
+        case "r":
+        case "R":
+          if (currentMode === "game" || currentMode === "lowRes" || currentMode === "filled") // reset game
+          {
+            ResetGame();
+          }
+          else // reset camera
+          {
+            SetCameraForMode(currentMode);
+            console.log("Reset");
+            Draw();
+          }
+          break;
+        case "g":
+        case "G": 
+          // Start game
+          if (currentMode === "game" || currentMode === "lowRes" || currentMode === "filled")
+          {
+            StartGame();
+          }
+          break;
+        default:
+          return; 
+      }
+    });
+
+  window.addEventListener("resize", ResizeCanvas);
+  ResizeCanvas();
+
+</script>
+</body>
+</html>
